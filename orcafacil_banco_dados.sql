@@ -1,122 +1,119 @@
-CREATE DATABASE orcafacil;
+CREATE DATABASE IF NOT EXISTS orcafacil;
 USE orcafacil;
 
--- Usuários (clientes, prestadores e admins)
+-- Tabela empresas (prestadores)
+CREATE TABLE empresa (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    razao_social VARCHAR(150) NOT NULL,
+    cnpj VARCHAR(18) UNIQUE NOT NULL,
+    descricao TEXT,
+    cep VARCHAR(10),
+    rua VARCHAR(100),
+    numero VARCHAR(10),
+    bairro VARCHAR(100),
+    cidade VARCHAR(100),
+    estado VARCHAR(2),
+    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela usuários
 CREATE TABLE usuario (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     senha VARCHAR(255) NOT NULL,
+    telefone VARCHAR(15),
     tipo_usuario ENUM('cliente', 'prestador', 'admin') NOT NULL,
-    aprovado BOOLEAN DEFAULT FALSE, -- apenas para cliente e prestador
-    foto_perfil LONGBLOB,
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    data_nascimento DATE,
+    cpf VARCHAR(14),
+    status ENUM('pendente', 'aprovado', 'bloqueado') DEFAULT 'pendente' -- controle de aprovação
 );
 
--- Cliente: extensão do usuário
-CREATE TABLE cliente (
-    id_usuario INT PRIMARY KEY,
-    FOREIGN KEY (id_usuario) REFERENCES usuario(id)
-);
-
--- Prestador: extensão do usuário
+-- Prestador vincula usuário a empresa (1 usuário por empresa)
 CREATE TABLE prestador (
-    id_usuario INT PRIMARY KEY,
-    descricao TEXT,
-    nota_media DECIMAL(3,2) DEFAULT 0.0,
-    FOREIGN KEY (id_usuario) REFERENCES usuario(id)
+    id INT PRIMARY KEY, -- corresponde a usuario.id
+    empresa_id INT NOT NULL UNIQUE,
+    FOREIGN KEY (id) REFERENCES usuario(id) ON DELETE CASCADE,
+    FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE CASCADE
 );
 
--- Solicitação de serviço feita por cliente
-CREATE TABLE solicitacao (
+-- Serviços solicitados
+CREATE TABLE servico (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    id_cliente INT,
-    titulo VARCHAR(100),
-    descricao TEXT,
-    etapa ENUM(
-        'aguardando_confirmacao_servico',
-        'agendada_visita',
-        'negociando',
-        'em_atendimento',
-        'finalizada',
-        'cancelada'
-    ) DEFAULT 'aguardando_confirmacao_servico',
-    status ENUM('aberta', 'fechada') DEFAULT 'aberta',
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_cliente) REFERENCES cliente(id_usuario)
+    cliente_id INT NOT NULL,
+    empresa_id INT NOT NULL,
+    descricao TEXT NOT NULL,
+    status ENUM(
+        'Solicitação Enviada',       -- Pedido criado, aguardando ação do prestador
+        'Recusado',                  -- Pedido recusado pelo prestador
+        'Negociando Visita',         -- Negociação data visita técnica
+        'Visita Confirmada',         -- Data visita aceita
+        'Negociando Datas',          -- Negociação datas da obra (início/fim)
+        'Orcamento Em Negociacao',   -- Orçamento e lista de materiais em negociação
+        'Em Execucao',               -- Serviço em execução
+        'Concluido'                  -- Serviço finalizado e avaliado
+    ) DEFAULT 'Solicitação Enviada',
+    data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    data_visita_tecnica DATE NULL,
+    data_visita_confirmada BOOLEAN DEFAULT FALSE,
+    data_inicio_negociada DATE NULL,
+    data_fim_negociada DATE NULL,
+    valor_mao_obra DECIMAL(10,2) NULL,
+    orcamento_finalizado BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (cliente_id) REFERENCES usuario(id) ON DELETE CASCADE,
+    FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE CASCADE
 );
 
--- Orçamentos enviados por prestadores
-CREATE TABLE orcamento (
+-- Negociação da visita técnica
+CREATE TABLE negociacao_visita (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    id_solicitacao INT,
-    id_prestador INT,
-    valor DECIMAL(10,2),
-    prazo_dias INT,
-    status ENUM('pendente', 'aceito', 'recusado') DEFAULT 'pendente',
+    servico_id INT NOT NULL,
+    proponente ENUM('prestador', 'cliente') NOT NULL,
+    data_visita DATE NOT NULL,
     data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_solicitacao) REFERENCES solicitacao(id),
-    FOREIGN KEY (id_prestador) REFERENCES prestador(id_usuario)
+    aceita BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
 );
 
--- Materiais levados ou usados em um orçamento
-CREATE TABLE material_orcamento (
+-- Negociação das datas da obra
+CREATE TABLE negociacao_datas (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    id_orcamento INT,
-    nome_material VARCHAR(100) NOT NULL,
-    quantidade INT DEFAULT 1,
-    unidade VARCHAR(20), -- ex: 'unidade', 'metro', 'litro'
-    observacoes TEXT,
-    FOREIGN KEY (id_orcamento) REFERENCES orcamento(id)
+    servico_id INT NOT NULL,
+    proponente ENUM('prestador', 'cliente') NOT NULL,
+    data_inicio DATE NOT NULL,
+    data_fim DATE NOT NULL,
+    data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    aceita BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
 );
 
--- Confirmações de ambas as partes
-CREATE TABLE confirmacoes (
+-- Lista de materiais do orçamento enviada pelo prestador
+CREATE TABLE lista_materiais (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    id_orcamento INT UNIQUE,
-    confirmado_cliente_valor BOOLEAN DEFAULT FALSE,
-    confirmado_prestador_valor BOOLEAN DEFAULT FALSE,
-    confirmado_cliente_visita BOOLEAN DEFAULT FALSE,
-    confirmado_prestador_visita BOOLEAN DEFAULT FALSE,
-    atendimento_confirmado BOOLEAN DEFAULT FALSE,
-    pagamento_confirmado BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (id_orcamento) REFERENCES orcamento(id)
+    servico_id INT NOT NULL,
+    nome_material VARCHAR(100),
+    quantidade INT,
+    preco_unitario DECIMAL(10, 2),
+    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
 );
 
--- Avaliações após o serviço
+-- Pedidos de revisão de orçamento solicitados pelo cliente
+CREATE TABLE pedido_revisao_orcamento (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    servico_id INT NOT NULL,
+    cliente_id INT NOT NULL,
+    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    descricao TEXT, -- opcional: motivo ou detalhes da solicitação
+    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE,
+    FOREIGN KEY (cliente_id) REFERENCES usuario(id) ON DELETE CASCADE
+);
+
+-- Avaliação final do serviço pelo cliente
 CREATE TABLE avaliacao (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    id_orcamento INT,
-    id_avaliador INT,
-    id_avaliado INT,
-    nota INT CHECK (nota BETWEEN 1 AND 5),
+    servico_id INT NOT NULL,
+    estrelas INT CHECK (estrelas BETWEEN 0 AND 5),
     comentario TEXT,
     data_avaliacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_orcamento) REFERENCES orcamento(id),
-    FOREIGN KEY (id_avaliador) REFERENCES usuario(id),
-    FOREIGN KEY (id_avaliado) REFERENCES usuario(id)
-);
-
--- Denúncias feitas por usuários
-CREATE TABLE denuncia (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    id_denunciante INT,
-    id_denunciado INT,
-    tipo VARCHAR(50),
-    descricao TEXT,
-    status ENUM('pendente', 'resolvida', 'arquivada') DEFAULT 'pendente',
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_denunciante) REFERENCES usuario(id),
-    FOREIGN KEY (id_denunciado) REFERENCES usuario(id)
-);
-
--- Ações realizadas por admins em denúncias
-CREATE TABLE acao_admin (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    id_admin INT,
-    id_denuncia INT,
-    acao TEXT,
-    data_acao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_admin) REFERENCES usuario(id),
-    FOREIGN KEY (id_denuncia) REFERENCES denuncia(id)
+    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
 );
