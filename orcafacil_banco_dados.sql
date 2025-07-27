@@ -1,19 +1,26 @@
 CREATE DATABASE IF NOT EXISTS orcafacil;
 USE orcafacil;
 
+-- Tabela de endereços (cada endereço será exclusivo para um usuário OU empresa)
+CREATE TABLE endereco (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cep VARCHAR(10),
+    rua VARCHAR(100),
+    numero VARCHAR(10),
+    bairro VARCHAR(100),
+    cidade VARCHAR(100),
+    estado VARCHAR(2)
+);
+
 -- Tabela empresas (prestadores)
 CREATE TABLE empresa (
     id INT AUTO_INCREMENT PRIMARY KEY,
     razao_social VARCHAR(150) NOT NULL,
     cnpj VARCHAR(18) UNIQUE NOT NULL,
     descricao TEXT,
-    cep VARCHAR(10),
-    rua VARCHAR(100),
-    numero VARCHAR(10),
-    bairro VARCHAR(100),
-    cidade VARCHAR(100),
-    estado VARCHAR(2),
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    endereco_id INT UNIQUE NOT NULL, -- cada empresa tem 1 endereço exclusivo
+    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (endereco_id) REFERENCES endereco(id) ON DELETE CASCADE
 );
 
 -- Tabela usuários
@@ -26,7 +33,9 @@ CREATE TABLE usuario (
     tipo_usuario ENUM('cliente', 'prestador', 'admin') NOT NULL,
     data_nascimento DATE,
     cpf VARCHAR(14),
-    status ENUM('pendente', 'aprovado', 'bloqueado') DEFAULT 'pendente' -- controle de aprovação
+    status ENUM('pendente', 'aprovado', 'bloqueado') DEFAULT 'pendente',
+    endereco_id INT UNIQUE NOT NULL, -- cada usuário tem 1 endereço exclusivo
+    FOREIGN KEY (endereco_id) REFERENCES endereco(id) ON DELETE CASCADE
 );
 
 -- Prestador vincula usuário a empresa (1 usuário por empresa)
@@ -44,14 +53,14 @@ CREATE TABLE servico (
     empresa_id INT NOT NULL,
     descricao TEXT NOT NULL,
     status ENUM(
-        'Solicitação Enviada',       -- Pedido criado, aguardando ação do prestador
-        'Recusado',                  -- Pedido recusado pelo prestador
-        'Negociando Visita',         -- Negociação data visita técnica
-        'Visita Confirmada',         -- Data visita aceita
-        'Negociando Datas',          -- Negociação datas da obra (início/fim)
-        'Orcamento Em Negociacao',   -- Orçamento e lista de materiais em negociação
-        'Em Execucao',               -- Serviço em execução
-        'Concluido'                  -- Serviço finalizado e avaliado
+        'Solicitação Enviada',
+        'Recusado',
+        'Negociando Visita',
+        'Visita Confirmada',
+        'Negociando Datas',
+        'Orcamento Em Negociacao',
+        'Em Execucao',
+        'Concluido'
     ) DEFAULT 'Solicitação Enviada',
     data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     data_visita_tecnica DATE NULL,
@@ -103,7 +112,7 @@ CREATE TABLE pedido_revisao_orcamento (
     servico_id INT NOT NULL,
     cliente_id INT NOT NULL,
     data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    descricao TEXT, -- opcional: motivo ou detalhes da solicitação
+    descricao TEXT,
     FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE,
     FOREIGN KEY (cliente_id) REFERENCES usuario(id) ON DELETE CASCADE
 );
