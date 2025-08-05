@@ -9,15 +9,15 @@ CREATE TABLE endereco (
     numero VARCHAR(10),
     bairro VARCHAR(100),
     cidade VARCHAR(100),
-    estado VARCHAR(2)
+    estado VARCHAR(2),
+    complemento varchar(30)
 );
 
 -- Tabela empresas (prestadores)
 CREATE TABLE empresa (
     id INT AUTO_INCREMENT PRIMARY KEY,
     razao_social VARCHAR(150) NOT NULL,
-    cnpj VARCHAR(18) UNIQUE NOT NULL,
-    descricao TEXT,
+    cnpj VARCHAR(14) UNIQUE NOT NULL,
     endereco_id INT UNIQUE NOT NULL, -- cada empresa tem 1 endereço exclusivo
     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (endereco_id) REFERENCES endereco(id) ON DELETE CASCADE
@@ -29,10 +29,10 @@ CREATE TABLE usuario (
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     senha VARCHAR(255) NOT NULL,
-    telefone VARCHAR(15),
+    telefone VARCHAR(11),
     tipo_usuario ENUM('cliente', 'prestador', 'admin') NOT NULL,
     data_nascimento DATE,
-    cpf VARCHAR(14),
+    cpf VARCHAR(11),
     status ENUM('pendente', 'aprovado', 'bloqueado') DEFAULT 'pendente',
     endereco_id INT UNIQUE NOT NULL, -- cada usuário tem 1 endereço exclusivo
     FOREIGN KEY (endereco_id) REFERENCES endereco(id) ON DELETE CASCADE
