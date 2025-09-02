@@ -1,128 +1,179 @@
+-- Criação do banco de dados
 CREATE DATABASE IF NOT EXISTS orcafacil;
 USE orcafacil;
 
--- Tabela de endereços (cada endereço será exclusivo para um usuário OU empresa)
-CREATE TABLE endereco (
+-- ==========================
+-- Tabela de endereços
+-- ==========================
+CREATE TABLE address (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    cep VARCHAR(10),
-    rua VARCHAR(100),
-    numero VARCHAR(10),
-    bairro VARCHAR(100),
-    cidade VARCHAR(100),
-    estado VARCHAR(2),
-    complemento varchar(30)
+    zip_code VARCHAR(10),
+    street VARCHAR(100),
+    number VARCHAR(10),
+    neighborhood VARCHAR(100),
+    city VARCHAR(100),
+    state VARCHAR(2),
+    complement VARCHAR(30)
 );
 
--- Tabela empresas (prestadores)
-CREATE TABLE empresa (
+-- ==========================
+-- Empresas (prestadores de serviço)
+-- ==========================
+CREATE TABLE company (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    razao_social VARCHAR(150) NOT NULL,
+    legal_name VARCHAR(150) NOT NULL,
     cnpj VARCHAR(14) UNIQUE NOT NULL,
-    endereco_id INT UNIQUE NOT NULL, -- cada empresa tem 1 endereço exclusivo
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (endereco_id) REFERENCES endereco(id) ON DELETE CASCADE
+    address_id INT UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (address_id) REFERENCES address(id) ON DELETE CASCADE
 );
 
--- Tabela usuários
-CREATE TABLE usuario (
+-- ==========================
+-- Usuários do sistema
+-- ==========================
+CREATE TABLE user_account (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
+    name VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
-    senha VARCHAR(255) NOT NULL,
-    telefone VARCHAR(11),
-    tipo_usuario ENUM('cliente', 'prestador', 'admin') NOT NULL,
-    data_nascimento DATE,
+    password VARCHAR(255) NOT NULL,
+    phone VARCHAR(15),
+    user_type ENUM('CLIENT', 'PROVIDER', 'ADMIN') NOT NULL,
+    birth_date DATE,
     cpf VARCHAR(11),
-    status ENUM('pendente', 'aprovado', 'bloqueado') DEFAULT 'pendente',
-    endereco_id INT UNIQUE NOT NULL, -- cada usuário tem 1 endereço exclusivo
-    FOREIGN KEY (endereco_id) REFERENCES endereco(id) ON DELETE CASCADE
+    status ENUM('PENDING', 'APPROVED', 'BLOCKED') DEFAULT 'PENDING',
+    address_id INT UNIQUE NOT NULL,
+    FOREIGN KEY (address_id) REFERENCES address(id) ON DELETE CASCADE
 );
 
--- Prestador vincula usuário a empresa (1 usuário por empresa)
-CREATE TABLE prestador (
-    id INT PRIMARY KEY, -- corresponde a usuario.id
-    empresa_id INT NOT NULL UNIQUE,
-    FOREIGN KEY (id) REFERENCES usuario(id) ON DELETE CASCADE,
-    FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE CASCADE
-);
-
--- Serviços solicitados
-CREATE TABLE servico (
+-- ==========================
+-- Categorias de serviço
+-- ==========================
+CREATE TABLE category (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    cliente_id INT NOT NULL,
-    empresa_id INT NOT NULL,
-    descricao TEXT NOT NULL,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(200) NOT NULL
+);
+
+-- ==========================
+-- Vínculo entre usuário prestador, empresa e categoria
+-- ==========================
+CREATE TABLE provider (
+    id INT PRIMARY KEY, -- corresponde ao id do user_account
+    company_id INT NOT NULL UNIQUE,
+    category_id INT NOT NULL,
+    FOREIGN KEY (id) REFERENCES user_account(id) ON DELETE CASCADE,
+    FOREIGN KEY (company_id) REFERENCES company(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE RESTRICT
+);
+
+-- ==========================
+-- Solicitações de serviço
+-- ==========================
+CREATE TABLE service (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    company_id INT NOT NULL,
+    description TEXT NOT NULL,
     status ENUM(
-        'Solicitação Enviada',
-        'Recusado',
-        'Negociando Visita',
-        'Visita Confirmada',
-        'Negociando Datas',
-        'Orcamento Em Negociacao',
-        'Em Execucao',
-        'Concluido'
-    ) DEFAULT 'Solicitação Enviada',
-    data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    data_visita_tecnica DATE NULL,
-    data_visita_confirmada BOOLEAN DEFAULT FALSE,
-    data_inicio_negociada DATE NULL,
-    data_fim_negociada DATE NULL,
-    valor_mao_obra DECIMAL(10,2) NULL,
-    orcamento_finalizado BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (cliente_id) REFERENCES usuario(id) ON DELETE CASCADE,
-    FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE CASCADE
+        'REQUEST_SENT',
+        'REJECTED',
+        'NEGOTIATING_VISIT',
+        'VISIT_CONFIRMED',
+        'NEGOTIATING_DATES',
+        'BUDGET_IN_NEGOTIATION',
+        'IN_PROGRESS',
+        'COMPLETED'
+    ) DEFAULT 'REQUEST_SENT',
+    request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    technical_visit_date DATE NULL,
+
+    -- Confirmações bilaterais
+    client_visit_confirmed BOOLEAN DEFAULT FALSE,
+    provider_visit_confirmed BOOLEAN DEFAULT FALSE,
+    client_dates_confirmed BOOLEAN DEFAULT FALSE,
+    provider_dates_confirmed BOOLEAN DEFAULT FALSE,
+    client_materials_confirmed BOOLEAN DEFAULT FALSE,
+    provider_materials_confirmed BOOLEAN DEFAULT FALSE,
+
+    negotiated_start_date DATE NULL,
+    negotiated_end_date DATE NULL,
+    labor_cost DECIMAL(10,2) NULL,
+    budget_finalized BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (client_id) REFERENCES user_account(id) ON DELETE CASCADE,
+    FOREIGN KEY (company_id) REFERENCES company(id) ON DELETE CASCADE
 );
 
+-- ==========================
 -- Negociação da visita técnica
-CREATE TABLE negociacao_visita (
+-- ==========================
+CREATE TABLE visit_negotiation (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    servico_id INT NOT NULL,
-    proponente ENUM('prestador', 'cliente') NOT NULL,
-    data_visita DATE NOT NULL,
-    data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    aceita BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
+    service_id INT NOT NULL,
+    proposer ENUM('PROVIDER', 'CLIENT') NOT NULL,
+    visit_date DATE NOT NULL,
+    sent_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    accepted BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (service_id) REFERENCES service(id) ON DELETE CASCADE
 );
 
+-- ==========================
 -- Negociação das datas da obra
-CREATE TABLE negociacao_datas (
+-- ==========================
+CREATE TABLE date_negotiation (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    servico_id INT NOT NULL,
-    proponente ENUM('prestador', 'cliente') NOT NULL,
-    data_inicio DATE NOT NULL,
-    data_fim DATE NOT NULL,
-    data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    aceita BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
+    service_id INT NOT NULL,
+    proposer ENUM('PROVIDER', 'CLIENT') NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    sent_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    accepted BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (service_id) REFERENCES service(id) ON DELETE CASCADE
 );
 
--- Lista de materiais do orçamento enviada pelo prestador
-CREATE TABLE lista_materiais (
+-- ==========================
+-- Lista de materiais enviada pelo prestador
+-- ==========================
+CREATE TABLE material_list (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    servico_id INT NOT NULL,
+    service_id INT NOT NULL,
     nome_material VARCHAR(100),
-    quantidade INT,
-    preco_unitario DECIMAL(10, 2),
-    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
+    quantity INT,
+    unit_price DECIMAL(10, 2),
+    FOREIGN KEY (service_id) REFERENCES service(id) ON DELETE CASCADE
 );
 
--- Pedidos de revisão de orçamento solicitados pelo cliente
-CREATE TABLE pedido_revisao_orcamento (
+-- ==========================
+-- Pedidos de revisão de orçamento pelo cliente
+-- ==========================
+CREATE TABLE budget_revision_request (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    servico_id INT NOT NULL,
-    cliente_id INT NOT NULL,
-    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    descricao TEXT,
-    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE,
-    FOREIGN KEY (cliente_id) REFERENCES usuario(id) ON DELETE CASCADE
+    service_id INT NOT NULL,
+    client_id INT NOT NULL,
+    request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (service_id) REFERENCES service(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES user_account(id) ON DELETE CASCADE
 );
 
--- Avaliação final do serviço pelo cliente
-CREATE TABLE avaliacao (
+-- ==========================
+-- Avaliação final do serviço
+-- ==========================
+CREATE TABLE evaluation (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    servico_id INT NOT NULL,
-    estrelas INT CHECK (estrelas BETWEEN 0 AND 5),
-    comentario TEXT,
-    data_avaliacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (servico_id) REFERENCES servico(id) ON DELETE CASCADE
+    service_id INT NOT NULL,
+    stars INT CHECK (stars BETWEEN 0 AND 5),
+    evaluation_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (service_id) REFERENCES service(id) ON DELETE CASCADE
 );
+ALTER TABLE service MODIFY COLUMN status VARCHAR(50);
+-- ==========================
+-- Consultas auxiliares
+-- ==========================
+
+SELECT * FROM user_account;
+SELECT * FROM service;
+SELECT * FROM material_list ;
+SELECT * FROM address;
+select * from category;
+delete from user_account where id= 1 ;
+delete from user_account where id= 2 ;
+delete from address where id= 1 and 2;
